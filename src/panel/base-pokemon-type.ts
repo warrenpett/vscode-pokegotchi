@@ -39,6 +39,9 @@ export abstract class BasePokemonType implements IPokemonType {
     private el: HTMLImageElement;
     private collision: HTMLDivElement;
     private speech: HTMLImageElement;
+    private levelBadge!: HTMLDivElement;
+    private xpBar!: HTMLDivElement;
+    private xpBarFill!: HTMLDivElement;
     private _left: number;
     private _bottom: number;
     pokemonRoot: string;
@@ -105,6 +108,43 @@ export abstract class BasePokemonType implements IPokemonType {
         this.speech.style.left = `${left}px`;
         this.speech.style.bottom = `${bottom + spriteSize}px`;
         this.hideSpeechBubble();
+
+        this.initStatsOverlay(left, bottom + spriteSize);
+    }
+
+    private initStatsOverlay(left: number, aboveSpriteBottom: number) {
+        this.levelBadge = document.createElement('div');
+        this.levelBadge.className = 'pokemon-level-badge';
+        this.levelBadge.style.left = `${left}px`;
+        this.levelBadge.style.bottom = `${aboveSpriteBottom + 5}px`;
+
+        this.xpBar = document.createElement('div');
+        this.xpBar.className = 'pokemon-xp-bar';
+        this.xpBar.style.left = `${left}px`;
+        this.xpBar.style.bottom = `${aboveSpriteBottom + 1}px`;
+
+        this.xpBarFill = document.createElement('div');
+        this.xpBarFill.className = 'pokemon-xp-bar-fill';
+        this.xpBar.appendChild(this.xpBarFill);
+
+        this.el.parentElement?.appendChild(this.levelBadge);
+        this.el.parentElement?.appendChild(this.xpBar);
+    }
+
+    setLevel(level: number): void {
+        this.levelBadge.textContent = `Lv.${level}`;
+        this.levelBadge.style.display = 'block';
+    }
+
+    setXpProgress(current: number, max: number): void {
+        const percent = max > 0 ? Math.min(100, Math.max(0, (current / max) * 100)) : 0;
+        this.xpBarFill.style.width = `${percent}%`;
+        this.xpBar.style.display = 'block';
+    }
+
+    removeStatsOverlay(): void {
+        this.levelBadge.remove();
+        this.xpBar.remove();
     }
 
     get left(): number {
@@ -116,11 +156,15 @@ export abstract class BasePokemonType implements IPokemonType {
     }
 
     private repositionAccompanyingElements() {
+        const aboveSpriteBottom = this._bottom + this.calculateSpriteWidth(this._size, this._originalSpriteSize);
         this.collision.style.left = `${this._left}px`;
         this.collision.style.bottom = `${this._bottom}px`;
         this.speech.style.left = `${this._left}px`;
-        this.speech.style.bottom = `${this._bottom + this.calculateSpriteWidth(this._size, this._originalSpriteSize)
-            }px`;
+        this.speech.style.bottom = `${aboveSpriteBottom}px`;
+        this.levelBadge.style.left = `${this._left}px`;
+        this.levelBadge.style.bottom = `${aboveSpriteBottom + 5}px`;
+        this.xpBar.style.left = `${this._left}px`;
+        this.xpBar.style.bottom = `${aboveSpriteBottom + 1}px`;
     }
 
     calculateSpriteWidth(size: PokemonSize, originalSpriteSize: number): number {

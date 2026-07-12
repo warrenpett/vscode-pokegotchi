@@ -11,16 +11,21 @@ import {
     ALL_SCALES,
     ALL_THEMES,
     PokemonGeneration,
+    ActivityTickPayload,
+    LevelUpPayload,
 } from '../common/types';
 import { randomName } from '../common/names';
 import * as localize from '../common/localize';
 import { availableColors, normalizeColor } from '../panel/pokemon-collection';
 import { getDefaultPokemon, getPokemonByGeneration, getRandomPokemonConfig, POKEMON_DATA } from '../common/pokemon-data';
+import { ProgressMap, PokemonProgress, DEFAULT_PROGRESS, applyXp, xpForLevel } from '../common/progression';
+import { ActivityTracker } from './activity-tracker';
 
 const EXTRA_POKEMON_KEY = 'vscode-pokemon.extra-pokemon';
 const EXTRA_POKEMON_KEY_TYPES = EXTRA_POKEMON_KEY + '.types';
 const EXTRA_POKEMON_KEY_COLORS = EXTRA_POKEMON_KEY + '.colors';
 const EXTRA_POKEMON_KEY_NAMES = EXTRA_POKEMON_KEY + '.names';
+const EXTRA_POKEMON_KEY_PROGRESS = EXTRA_POKEMON_KEY + '.progress';
 const DEFAULT_POKEMON_SCALE = PokemonSize.nano;
 const DEFAULT_COLOR = PokemonColor.default;
 const DEFAULT_POKEMON_TYPE = getDefaultPokemon();
@@ -49,6 +54,7 @@ class PokemonQuickPickItem implements vscode.QuickPickItem {
 }
 
 let webviewViewProvider: PokemonWebviewViewProvider;
+let activeExtensionContext: vscode.ExtensionContext | undefined;
 
 function getConfiguredSize(): PokemonSize {
     var size = vscode.workspace
@@ -191,7 +197,106 @@ export async function storeCollectionAsMemento(
         EXTRA_POKEMON_KEY_TYPES,
         EXTRA_POKEMON_KEY_COLORS,
         EXTRA_POKEMON_KEY_NAMES,
+        EXTRA_POKEMON_KEY_PROGRESS,
     ]);
+}
+
+function getProgressMap(context: vscode.ExtensionContext): ProgressMap {
+    return context.globalState.get<ProgressMap>(EXTRA_POKEMON_KEY_PROGRESS, {});
+}
+
+async function storeProgressMap(context: vscode.ExtensionContext, map: ProgressMap) {
+    await context.globalState.update(EXTRA_POKEMON_KEY_PROGRESS, map);
+}
+
+/**
+ * The single pokemon that earns coding-activity XP: the first entry in the
+ * persisted collection order (i.e. the first one the player spawned).
+ */
+function getActivePokemonName(context: vscode.ExtensionContext): string | undefined {
+    return context.globalState.get<string[]>(EXTRA_POKEMON_KEY_NAMES, [])[0];
+}
+
+interface ActivitySettings {
+    xpPerSave: number;
+    xpPerCommit: number;
+    dailyXpCap: number;
+    focusIdleMinutes: number;
+}
+
+function isActivityTrackingEnabled(): boolean {
+    return vscode.workspace
+        .getConfiguration('vscode-pokemon')
+        .get<boolean>('activity.enabled', true);
+}
+
+function getActivitySettings(): ActivitySettings {
+    const config = vscode.workspace.getConfiguration('vscode-pokemon');
+    return {
+        xpPerSave: config.get<number>('activity.xpPerSave', 10),
+        xpPerCommit: config.get<number>('activity.xpPerCommit', 50),
+        dailyXpCap: config.get<number>('activity.dailyXpCap', 500),
+        focusIdleMinutes: config.get<number>('activity.focusIdleMinutes', 2),
+    };
+}
+
+/**
+ * Grants XP earned from coding activity to the active pokemon, persists the
+ * result, and notifies whichever panel is live so it can update the UI.
+ */
+async function awardActivityXp(
+    context: vscode.ExtensionContext,
+    amount: number,
+): Promise<void> {
+    const activeName = getActivePokemonName(context);
+    if (!activeName) {
+        return;
+    }
+    const progressMap = getProgressMap(context);
+    const current: PokemonProgress = progressMap[activeName] ?? { ...DEFAULT_PROGRESS };
+    const result = applyXp(current, amount);
+    progressMap[activeName] = result.progress;
+    await storeProgressMap(context, progressMap);
+
+    updateStatusBar();
+
+    const panel = getPokemonPanel();
+    if (!panel) {
+        return;
+    }
+    panel.postActivityTick({
+        pokemonName: activeName,
+        level: result.progress.level,
+        xp: result.progress.xp,
+        xpToNextLevel: xpForLevel(result.progress.level),
+    });
+    if (result.leveledUp && result.newLevel !== undefined) {
+        panel.postLevelUp({ pokemonName: activeName, newLevel: result.newLevel });
+    }
+}
+
+/**
+ * Pushes the active pokemon's current level/XP to whichever panel is live -
+ * used right after the panel (re)spawns its collection so the level badge
+ * and XP bar populate immediately instead of waiting for the next activity
+ * event.
+ */
+function pushActivitySnapshot(context: vscode.ExtensionContext): void {
+    const activeName = getActivePokemonName(context);
+    if (!activeName) {
+        return;
+    }
+    const progress = getProgressMap(context)[activeName];
+    if (!progress) {
+        return;
+    }
+    const panel = getPokemonPanel();
+    panel?.postActivityTick({
+        pokemonName: activeName,
+        level: progress.level,
+        xp: progress.xp,
+        xpToNextLevel: xpForLevel(progress.level),
+    });
 }
 
 let spawnPokemonStatusBar: vscode.StatusBarItem;
@@ -290,6 +395,19 @@ function getWebview(): vscode.Webview | undefined {
 }
 
 export function activate(context: vscode.ExtensionContext) {
+    activeExtensionContext = context;
+
+    const activityTracker = new ActivityTracker({
+        context,
+        isEnabled: isActivityTrackingEnabled,
+        getConfig: getActivitySettings,
+        onXpEarned: (amount) => {
+            void awardActivityXp(context, amount);
+        },
+    });
+    activityTracker.register();
+    context.subscriptions.push(activityTracker);
+
     context.subscriptions.push(
         vscode.commands.registerCommand('vscode-pokemon.start', async () => {
             if (
@@ -321,6 +439,7 @@ export function activate(context: vscode.ExtensionContext) {
                     });
                     // Store the collection in the memento, incase any of the null values (e.g. name) have been set
                     await storeCollectionAsMemento(context, collection);
+                    pushActivitySnapshot(context);
                 }
             }
         }),
@@ -716,8 +835,18 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 function updateStatusBar(): void {
-    spawnPokemonStatusBar.text = `$(squirrel)`;
-    spawnPokemonStatusBar.tooltip = vscode.l10n.t('Spawn Pokemon');
+    const activeName = activeExtensionContext ? getActivePokemonName(activeExtensionContext) : undefined;
+    const progress = activeName && activeExtensionContext
+        ? getProgressMap(activeExtensionContext)[activeName]
+        : undefined;
+
+    if (activeName && progress) {
+        spawnPokemonStatusBar.text = `$(squirrel) Lv.${progress.level} (${progress.xp}/${xpForLevel(progress.level)})`;
+        spawnPokemonStatusBar.tooltip = vscode.l10n.t('{0} - Level {1}', activeName, progress.level);
+    } else {
+        spawnPokemonStatusBar.text = `$(squirrel)`;
+        spawnPokemonStatusBar.tooltip = vscode.l10n.t('Spawn Pokemon');
+    }
     spawnPokemonStatusBar.show();
 }
 
@@ -751,6 +880,8 @@ interface IPokemonPanel {
     updateTheme(newTheme: Theme, themeKind: vscode.ColorThemeKind): void;
     update(): void;
     setThrowWithMouse(newThrowWithMouse: boolean): void;
+    postActivityTick(payload: ActivityTickPayload): void;
+    postLevelUp(payload: LevelUpPayload): void;
 }
 
 class PokemonWebviewContainer implements IPokemonPanel {
@@ -887,6 +1018,20 @@ class PokemonWebviewContainer implements IPokemonPanel {
         void this.getWebview().postMessage({
             command: 'delete-pokemon',
             name: pokemonName,
+        });
+    }
+
+    public postActivityTick(payload: ActivityTickPayload): void {
+        void this.getWebview().postMessage({
+            command: 'activity-tick',
+            ...payload,
+        });
+    }
+
+    public postLevelUp(payload: LevelUpPayload): void {
+        void this.getWebview().postMessage({
+            command: 'level-up',
+            ...payload,
         });
     }
 
@@ -1254,6 +1399,7 @@ async function createPokemonPlayground(context: vscode.ExtensionContext) {
             PokemonPanel.currentPanel?.spawnPokemon(item);
         });
         await storeCollectionAsMemento(context, collection);
+        pushActivitySnapshot(context);
     } else {
         var collection = PokemonSpecification.collectionFromMemento(
             context,

@@ -34,6 +34,11 @@ export interface IPokemonType {
     isPlaying: boolean;
 
     showSpeechBubble(duration: number, friend: boolean): void;
+
+    // Stats overlay API (XP/level display driven by coding activity)
+    setLevel(level: number): void;
+    setXpProgress(current: number, max: number): void;
+    removeStatsOverlay(): void;
 }
 
 export class PokemonInstanceState {
