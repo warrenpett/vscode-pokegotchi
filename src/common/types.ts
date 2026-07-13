@@ -23,6 +23,12 @@ export interface PokemonConfig {
     cry: string;
     possibleColors: PokemonColor[];
     originalSpriteSize?: number,
+    evolvesTo?: PokemonType;
+    evolvesAtLevel?: number;
+    baseStats?: {
+        power: number;
+        guts: number;
+    };
 }
 
 export const enum PokemonSpeed {
@@ -62,11 +68,25 @@ export const enum ColorThemeKind {
 export class WebviewMessage {
     text: string;
     command: string;
+    payload?: Record<string, unknown>;
 
-    constructor(text: string, command: string) {
+    constructor(text: string, command: string, payload?: Record<string, unknown>) {
         this.text = text;
         this.command = command;
+        this.payload = payload;
     }
+}
+
+export interface ActivityTickPayload {
+    pokemonName: string;
+    level: number;
+    xp: number;
+    xpToNextLevel: number;
+}
+
+export interface LevelUpPayload {
+    pokemonName: string;
+    newLevel: number;
 }
 
 export const ALL_COLORS = [

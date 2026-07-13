@@ -478,6 +478,20 @@ export function pokemonPanelApp(
                 pokemonCounter = 0;
                 saveState(stateApi);
                 break;
+            case 'activity-tick':
+                var tickedPokemon = allPokemon.locate(message.pokemonName);
+                if (tickedPokemon) {
+                    tickedPokemon.pokemon.setLevel(message.level);
+                    tickedPokemon.pokemon.setXpProgress(message.xp, message.xpToNextLevel);
+                }
+                break;
+            case 'level-up':
+                var leveledPokemon = allPokemon.locate(message.pokemonName);
+                if (leveledPokemon) {
+                    leveledPokemon.pokemon.setLevel(message.newLevel);
+                    leveledPokemon.pokemon.showSpeechBubble(3000, false);
+                }
+                break;
             case 'pause-pokemon':
                 pokemonCounter = 1;
                 saveState(stateApi);

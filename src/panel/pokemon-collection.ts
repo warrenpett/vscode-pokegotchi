@@ -15,6 +15,7 @@ export class PokemonElement {
         this.el.remove();
         this.collision.remove();
         this.speech.remove();
+        this.pokemon.removeStatsOverlay();
         this.color = PokemonColor.null;
     }
 

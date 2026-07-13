@@ -166,6 +166,31 @@
                         ],
                         "default": "none",
                         "description": "Background theme assets for your pokemon"
+                    },
+                    "vscode-pokemon.activity.enabled": {
+                        "type": "boolean",
+                        "default": true,
+                        "description": "Whether your coding activity (saves, focus time, git commits) earns XP for your active pokemon"
+                    },
+                    "vscode-pokemon.activity.dailyXpCap": {
+                        "type": "number",
+                        "default": 500,
+                        "description": "Maximum XP earnable from saves and focus time per day (commits are exempt)"
+                    },
+                    "vscode-pokemon.activity.focusIdleMinutes": {
+                        "type": "number",
+                        "default": 2,
+                        "description": "Minutes of inactivity after which focus-time XP stops accruing"
+                    },
+                    "vscode-pokemon.activity.xpPerSave": {
+                        "type": "number",
+                        "default": 10,
+                        "description": "Base XP granted per meaningful file save"
+                    },
+                    "vscode-pokemon.activity.xpPerCommit": {
+                        "type": "number",
+                        "default": 50,
+                        "description": "XP granted per git commit"
                     }
                 }
             }
