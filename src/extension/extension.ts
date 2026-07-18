@@ -13,13 +13,22 @@ import {
     PokemonGeneration,
     ActivityTickPayload,
     LevelUpPayload,
+    EncounterSpawnPayload,
+    BattleResultPayload,
 } from '../common/types';
 import { randomName } from '../common/names';
 import * as localize from '../common/localize';
 import { availableColors, normalizeColor } from '../panel/pokemon-collection';
 import { getDefaultPokemon, getPokemonByGeneration, getRandomPokemonConfig, POKEMON_DATA } from '../common/pokemon-data';
 import { ProgressMap, PokemonProgress, DEFAULT_PROGRESS, applyXp, xpForLevel } from '../common/progression';
+import { DEFAULT_BATTLE_STATS, resolveBattle } from '../common/battle';
 import { ActivityTracker } from './activity-tracker';
+import {
+    DEFAULT_ENCOUNTER_TRIGGER_STATE,
+    EncounterTriggerState,
+    evaluateCommitEncounter,
+    evaluateSaveStreakEncounter,
+} from './encounter-trigger';
 
 const EXTRA_POKEMON_KEY = 'vscode-pokemon.extra-pokemon';
 const EXTRA_POKEMON_KEY_TYPES = EXTRA_POKEMON_KEY + '.types';
@@ -55,6 +64,14 @@ class PokemonQuickPickItem implements vscode.QuickPickItem {
 
 let webviewViewProvider: PokemonWebviewViewProvider;
 let activeExtensionContext: vscode.ExtensionContext | undefined;
+
+interface ActiveEncounter {
+    encounterId: string;
+    type: PokemonType;
+    level: number;
+}
+let activeEncounter: ActiveEncounter | undefined;
+let encounterTriggerState: EncounterTriggerState = { ...DEFAULT_ENCOUNTER_TRIGGER_STATE };
 
 function getConfiguredSize(): PokemonSize {
     var size = vscode.workspace
@@ -240,6 +257,124 @@ function getActivitySettings(): ActivitySettings {
     };
 }
 
+interface EncounterSettings {
+    enabled: boolean;
+    commitChance: number;
+    cooldownMinutes: number;
+    savesPerEncounter: number;
+}
+
+function getEncounterSettings(): EncounterSettings {
+    const config = vscode.workspace.getConfiguration('vscode-pokemon');
+    return {
+        enabled: config.get<boolean>('encounters.enabled', true),
+        commitChance: config.get<number>('encounters.commitChance', 0.4),
+        cooldownMinutes: config.get<number>('encounters.cooldownMinutes', 10),
+        savesPerEncounter: config.get<number>('encounters.savesPerEncounter', 15),
+    };
+}
+
+/**
+ * Spawns a random wild pokemon in whichever panel is live, roughly matched
+ * to the active pokemon's level, and remembers it host-side so a later
+ * `battle-start` message can be resolved authoritatively.
+ */
+function spawnWildEncounter(context: vscode.ExtensionContext): void {
+    const panel = getPokemonPanel();
+    if (!panel) {
+        return;
+    }
+    const [wildType, wildConfig] = getRandomPokemonConfig();
+    const activeName = getActivePokemonName(context);
+    const activeLevel = activeName ? getProgressMap(context)[activeName]?.level ?? 1 : 1;
+    const wildLevel = Math.max(1, activeLevel + Math.floor(Math.random() * 5) - 2);
+    const encounterId = `encounter-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+
+    activeEncounter = { encounterId, type: wildType, level: wildLevel };
+    panel.spawnEncounter({
+        encounterId,
+        type: wildType,
+        color: wildConfig.possibleColors[0],
+        generation: `gen${wildConfig.generation}`,
+        originalSpriteSize: wildConfig.originalSpriteSize ?? 32,
+        name: `Wild ${wildConfig.name}`,
+    });
+}
+
+function maybeSpawnCommitEncounter(context: vscode.ExtensionContext): void {
+    const settings = getEncounterSettings();
+    if (!settings.enabled) {
+        return;
+    }
+    const decision = evaluateCommitEncounter(
+        encounterTriggerState,
+        settings,
+        Date.now(),
+        activeEncounter !== undefined,
+    );
+    encounterTriggerState = decision.nextState;
+    if (decision.shouldSpawn) {
+        spawnWildEncounter(context);
+    }
+}
+
+function maybeSpawnSaveStreakEncounter(context: vscode.ExtensionContext): void {
+    const settings = getEncounterSettings();
+    if (!settings.enabled) {
+        return;
+    }
+    const decision = evaluateSaveStreakEncounter(
+        encounterTriggerState,
+        settings,
+        Date.now(),
+        activeEncounter !== undefined,
+    );
+    encounterTriggerState = decision.nextState;
+    if (decision.shouldSpawn) {
+        spawnWildEncounter(context);
+    }
+}
+
+/**
+ * Resolves a `battle-start` request from the webview. Battle resolution is
+ * host-authoritative so it can't be gamed by inspecting/modifying the
+ * webview - the wild pokemon's identity is only ever known here.
+ */
+async function handleBattleStart(context: vscode.ExtensionContext, encounterId: string): Promise<void> {
+    if (!activeEncounter || activeEncounter.encounterId !== encounterId) {
+        return;
+    }
+    const encounter = activeEncounter;
+    activeEncounter = undefined;
+
+    const activeName = getActivePokemonName(context);
+    const playerProgress = activeName
+        ? getProgressMap(context)[activeName] ?? DEFAULT_PROGRESS
+        : DEFAULT_PROGRESS;
+    const collection = PokemonSpecification.collectionFromMemento(context, getConfiguredSize());
+    const playerType = collection[0]?.type;
+    const playerStats = (playerType ? POKEMON_DATA[playerType]?.baseStats : undefined) ?? DEFAULT_BATTLE_STATS;
+    const wildStats = POKEMON_DATA[encounter.type]?.baseStats ?? DEFAULT_BATTLE_STATS;
+
+    const result = resolveBattle(playerProgress.level, playerStats, encounter.level, wildStats);
+
+    const activitySettings = getActivitySettings();
+    const xpAwarded = result.won
+        ? Math.round(activitySettings.xpPerCommit * 1.5)
+        : Math.round(activitySettings.xpPerCommit * 0.2);
+    await awardActivityXp(context, xpAwarded);
+
+    const panel = getPokemonPanel();
+    panel?.postBattleResult({ encounterId, won: result.won });
+
+    const wildName = POKEMON_DATA[encounter.type]?.name ?? encounter.type;
+    void vscode.window.showInformationMessage(
+        result.won
+            ? vscode.l10n.t('You won the battle against the wild {0}! Bonus XP earned.', wildName)
+            : vscode.l10n.t('The wild {0} got away this time.', wildName),
+    );
+}
+
 /**
  * Grants XP earned from coding activity to the active pokemon, persists the
  * result, and notifies whichever panel is live so it can update the UI.
@@ -401,8 +536,13 @@ export function activate(context: vscode.ExtensionContext) {
         context,
         isEnabled: isActivityTrackingEnabled,
         getConfig: getActivitySettings,
-        onXpEarned: (amount) => {
+        onXpEarned: (amount, source) => {
             void awardActivityXp(context, amount);
+            if (source === 'commit') {
+                maybeSpawnCommitEncounter(context);
+            } else if (source === 'save') {
+                maybeSpawnSaveStreakEncounter(context);
+            }
         },
     });
     activityTracker.register();
@@ -511,6 +651,12 @@ export function activate(context: vscode.ExtensionContext) {
             } else {
                 await createPokemonPlayground(context);
             }
+        }),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('vscode-pokemon.trigger-test-encounter', () => {
+            spawnWildEncounter(context);
         }),
     );
 
@@ -882,6 +1028,8 @@ interface IPokemonPanel {
     setThrowWithMouse(newThrowWithMouse: boolean): void;
     postActivityTick(payload: ActivityTickPayload): void;
     postLevelUp(payload: LevelUpPayload): void;
+    spawnEncounter(payload: EncounterSpawnPayload): void;
+    postBattleResult(payload: BattleResultPayload): void;
 }
 
 class PokemonWebviewContainer implements IPokemonPanel {
@@ -1035,6 +1183,20 @@ class PokemonWebviewContainer implements IPokemonPanel {
         });
     }
 
+    public spawnEncounter(payload: EncounterSpawnPayload): void {
+        void this.getWebview().postMessage({
+            command: 'encounter-spawn',
+            ...payload,
+        });
+    }
+
+    public postBattleResult(payload: BattleResultPayload): void {
+        void this.getWebview().postMessage({
+            command: 'battle-result',
+            ...payload,
+        });
+    }
+
     protected getWebview(): vscode.Webview {
         throw new Error('Not implemented');
     }
@@ -1142,6 +1304,13 @@ function handleWebviewMessage(message: WebviewMessage) {
         case 'info':
             void vscode.window.showInformationMessage(message.text);
             return;
+        case 'battle-start': {
+            const encounterId = message.payload?.encounterId;
+            if (activeExtensionContext && typeof encounterId === 'string') {
+                void handleBattleStart(activeExtensionContext, encounterId);
+            }
+            return;
+        }
     }
 }
 

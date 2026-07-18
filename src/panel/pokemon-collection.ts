@@ -11,6 +11,8 @@ export class PokemonElement {
     type: PokemonType;
     generation: string;
     originalSpriteSize: number;
+    isWild: boolean;
+    encounterId?: string;
     remove() {
         this.el.remove();
         this.collision.remove();
@@ -28,6 +30,8 @@ export class PokemonElement {
         type: PokemonType,
         generation: string,
         originalSpriteSize: number,
+        isWild: boolean = false,
+        encounterId?: string,
     ) {
         this.el = el;
         this.collision = collision;
@@ -37,6 +41,8 @@ export class PokemonElement {
         this.type = type;
         this.generation = generation;
         this.originalSpriteSize = originalSpriteSize;
+        this.isWild = isWild;
+        this.encounterId = encounterId;
     }
 }
 
@@ -47,6 +53,8 @@ export interface IPokemonCollection {
     seekNewFriends(): string[];
     locate(name: string): PokemonElement | undefined;
     remove(name: string): void;
+    wildEncounters(): PokemonElement[];
+    locateByEncounterId(encounterId: string): PokemonElement | undefined;
 }
 
 export class PokemonCollection implements IPokemonCollection {
@@ -77,6 +85,14 @@ export class PokemonCollection implements IPokemonCollection {
         });
     }
 
+    wildEncounters(): PokemonElement[] {
+        return this._pokemonCollection.filter((collection) => collection.isWild);
+    }
+
+    locateByEncounterId(encounterId: string): PokemonElement | undefined {
+        return this._pokemonCollection.find((collection) => collection.encounterId === encounterId);
+    }
+
     remove(name: string): any {
         this._pokemonCollection.forEach((pokemon) => {
             if (pokemon.pokemon.name === name) {
@@ -94,10 +110,16 @@ export class PokemonCollection implements IPokemonCollection {
         } // You can't be friends with yourself.
         var messages = new Array<string>(0);
         this._pokemonCollection.forEach((pokemonInCollection) => {
+            if (pokemonInCollection.isWild) {
+                return;
+            } // Wild encounters don't make friends - they're here to be battled.
             if (pokemonInCollection.pokemon.hasFriend) {
                 return;
             } // I already have a friend!
             this._pokemonCollection.forEach((potentialFriend) => {
+                if (potentialFriend.isWild) {
+                    return;
+                } // Wild encounters don't make friends - they're here to be battled.
                 if (potentialFriend.pokemon.hasFriend) {
                     return;
                 } // Already has a friend. sorry.

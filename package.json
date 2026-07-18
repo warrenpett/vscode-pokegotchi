@@ -131,6 +131,11 @@
                 "command": "vscode-pokemon.roll-call",
                 "title": "Roll-call",
                 "category": "Pokemon Coding"
+            },
+            {
+                "command": "vscode-pokemon.trigger-test-encounter",
+                "title": "Trigger a test wild pokemon encounter",
+                "category": "Pokemon Coding"
             }
         ],
         "configuration": [
@@ -191,6 +196,26 @@
                         "type": "number",
                         "default": 50,
                         "description": "XP granted per git commit"
+                    },
+                    "vscode-pokemon.encounters.enabled": {
+                        "type": "boolean",
+                        "default": true,
+                        "description": "Whether coding activity can spawn wild pokemon encounters to battle"
+                    },
+                    "vscode-pokemon.encounters.commitChance": {
+                        "type": "number",
+                        "default": 0.4,
+                        "description": "Chance (0-1) that a git commit spawns a wild pokemon encounter"
+                    },
+                    "vscode-pokemon.encounters.cooldownMinutes": {
+                        "type": "number",
+                        "default": 10,
+                        "description": "Minimum minutes between wild pokemon encounters"
+                    },
+                    "vscode-pokemon.encounters.savesPerEncounter": {
+                        "type": "number",
+                        "default": 15,
+                        "description": "Fallback trigger for users without git tracking: spawn a wild pokemon encounter every N eligible saves"
                     }
                 }
             }
