@@ -6,63 +6,84 @@ export const POKEMON_DATA: { [key: string]: PokemonConfig } = {
     name: 'Bulbasaur',
     generation: PokemonGeneration.Gen1,
     cry: 'Bulbasaur!',
-    possibleColors: [PokemonColor.default]
+    possibleColors: [PokemonColor.default],
+    evolvesTo: 'ivysaur',
+    evolvesAtLevel: 8,
+    baseStats: { power: 8, guts: 9 }
   },
   ivysaur: {
     id: 2,
     name: 'Ivysaur',
     generation: PokemonGeneration.Gen1,
     cry: 'Ivysaur!',
-    possibleColors: [PokemonColor.default]
+    possibleColors: [PokemonColor.default],
+    evolvesTo: 'venusaur',
+    evolvesAtLevel: 16,
+    baseStats: { power: 11, guts: 11 }
   },
   venusaur: {
     id: 3,
     name: 'Venusaur',
     generation: PokemonGeneration.Gen1,
     cry: 'Venusaur!',
-    possibleColors: [PokemonColor.default]
+    possibleColors: [PokemonColor.default],
+    baseStats: { power: 15, guts: 14 }
   },
   charmander: {
     id: 4,
     name: 'Charmander',
     generation: PokemonGeneration.Gen1,
     cry: 'Charmander!',
-    possibleColors: [PokemonColor.default]
+    possibleColors: [PokemonColor.default],
+    evolvesTo: 'charmeleon',
+    evolvesAtLevel: 8,
+    baseStats: { power: 9, guts: 7 }
   },
   charmeleon: {
     id: 5,
     name: 'Charmeleon',
     generation: PokemonGeneration.Gen1,
     cry: 'Charmeleon!',
-    possibleColors: [PokemonColor.default]
+    possibleColors: [PokemonColor.default],
+    evolvesTo: 'charizard',
+    evolvesAtLevel: 16,
+    baseStats: { power: 12, guts: 10 }
   },
   charizard: {
     id: 6,
     name: 'Charizard',
     generation: PokemonGeneration.Gen1,
     cry: 'Charizard!',
-    possibleColors: [PokemonColor.default]
+    possibleColors: [PokemonColor.default],
+    baseStats: { power: 16, guts: 13 }
   },
   squirtle: {
     id: 7,
     name: 'Squirtle',
     generation: PokemonGeneration.Gen1,
     cry: 'Squritle!',
-    possibleColors: [PokemonColor.default]
+    possibleColors: [PokemonColor.default],
+    evolvesTo: 'wartortle',
+    evolvesAtLevel: 8,
+    baseStats: { power: 7, guts: 10 }
   },
   wartortle: {
     id: 8,
     name: 'Wartortle',
     generation: PokemonGeneration.Gen1,
     cry: 'Wartortle!',
-    possibleColors: [PokemonColor.default]
+    possibleColors: [PokemonColor.default],
+    evolvesTo: 'blastoise',
+    evolvesAtLevel: 16,
+    baseStats: { power: 10, guts: 13 }
   },
   blastoise: {
     id: 9,
     name: 'Blastoise',
     generation: PokemonGeneration.Gen1,
     cry: 'Blastoise!',
-    possibleColors: [PokemonColor.default]
+    possibleColors: [PokemonColor.default],
+    baseStats: { power: 14, guts: 17 }
   },
   caterpie: {
     id: 10,

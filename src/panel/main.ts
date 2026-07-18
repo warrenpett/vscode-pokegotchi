@@ -101,6 +101,19 @@ function handleMouseOver(e: MouseEvent) {
     });
 }
 
+function handleWildClick(e: MouseEvent, stateApi?: VscodeStateApi) {
+    var el = e.currentTarget as HTMLDivElement;
+    allPokemon.pokemonCollection.forEach((element) => {
+        if (element.collision === el && element.isWild && element.encounterId) {
+            stateApi?.postMessage({
+                command: 'battle-start',
+                text: '',
+                payload: { encounterId: element.encounterId },
+            });
+        }
+    });
+}
+
 function startAnimations(
     collision: HTMLDivElement,
     pokemon: IPokemonType,
@@ -136,7 +149,9 @@ function addPokemonToPanel(
     floor: number,
     name: string,
     stateApi?: VscodeStateApi,
-    incrementCounter: boolean = true
+    incrementCounter: boolean = true,
+    isWild: boolean = false,
+    encounterId?: string,
 ): PokemonElement {
     var pokemonSpriteElement: HTMLImageElement = document.createElement('img');
     pokemonSpriteElement.className = 'pokemon';
@@ -181,6 +196,9 @@ function addPokemonToPanel(
             pokemonCounter++;
         }
         startAnimations(collisionElement, newPokemon, stateApi);
+        if (isWild) {
+            collisionElement.addEventListener('click', (e) => handleWildClick(e, stateApi));
+        }
     } catch (e: any) {
         // Remove elements
         pokemonSpriteElement.remove();
@@ -198,6 +216,8 @@ function addPokemonToPanel(
         pokemonType,
         gen,
         originalSpriteSize,
+        isWild,
+        encounterId,
     );
 }
 
@@ -209,6 +229,10 @@ export function saveState(stateApi?: VscodeStateApi) {
     state.pokemonStates = new Array();
 
     allPokemon.pokemonCollection.forEach((pokemonItem) => {
+        if (pokemonItem.isWild) {
+            // Wild encounters are ephemeral and host-resolved - don't persist them.
+            return;
+        }
         state.pokemonStates?.push({
             pokemonName: pokemonItem.pokemon.name,
             pokemonColor: pokemonItem.color,
@@ -495,6 +519,36 @@ export function pokemonPanelApp(
             case 'pause-pokemon':
                 pokemonCounter = 1;
                 saveState(stateApi);
+                break;
+            case 'encounter-spawn':
+                allPokemon.push(
+                    addPokemonToPanel(
+                        message.type,
+                        basePokemonUri,
+                        message.generation,
+                        message.originalSpriteSize,
+                        message.color,
+                        pokemonSize,
+                        randomStartPosition(),
+                        floor,
+                        floor,
+                        message.name,
+                        stateApi,
+                        false,
+                        true,
+                        message.encounterId,
+                    ),
+                );
+                break;
+            case 'battle-result':
+                var battledPokemon = allPokemon.locateByEncounterId(message.encounterId);
+                if (battledPokemon) {
+                    battledPokemon.pokemon.showSpeechBubble(1200, message.won === true);
+                    var battledPokemonName = battledPokemon.pokemon.name;
+                    setTimeout(() => {
+                        allPokemon.remove(battledPokemonName);
+                    }, 1200);
+                }
                 break;
         }
     });

@@ -89,6 +89,20 @@ export interface LevelUpPayload {
     newLevel: number;
 }
 
+export interface EncounterSpawnPayload {
+    encounterId: string;
+    type: PokemonType;
+    color: PokemonColor;
+    generation: string;
+    originalSpriteSize: number;
+    name: string;
+}
+
+export interface BattleResultPayload {
+    encounterId: string;
+    won: boolean;
+}
+
 export const ALL_COLORS = [
     PokemonColor.default,
 ];
