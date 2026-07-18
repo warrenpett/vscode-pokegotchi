@@ -550,6 +550,18 @@ export function pokemonPanelApp(
                     }, 1200);
                 }
                 break;
+            case 'evolve':
+                var evolvedPokemon = allPokemon.locate(message.pokemonName);
+                if (evolvedPokemon) {
+                    var newRoot = `${basePokemonUri}/${message.generation}/${message.toType}/${evolvedPokemon.color}`;
+                    evolvedPokemon.pokemon.updateSpeciesRoot(newRoot);
+                    evolvedPokemon.type = message.toType;
+                    evolvedPokemon.generation = message.generation;
+                    evolvedPokemon.originalSpriteSize = message.originalSpriteSize;
+                    evolvedPokemon.pokemon.showSpeechBubble(2500, false);
+                    saveState(stateApi);
+                }
+                break;
         }
     });
 }

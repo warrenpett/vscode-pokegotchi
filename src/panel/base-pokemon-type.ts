@@ -304,6 +304,14 @@ export abstract class BasePokemonType implements IPokemonType {
         this.el.src = `${this.pokemonRoot}_${face}_8fps.gif`;
     }
 
+    updateSpeciesRoot(newRoot: string): void {
+        this.pokemonRoot = newRoot;
+        // Force a re-render even though the current face suffix is
+        // unchanged - setAnimation() would otherwise skip it since it only
+        // compares the suffix, not the species root.
+        this.el.src = `${this.pokemonRoot}_${this.currentState.spriteLabel}_8fps.gif`;
+    }
+
     chooseNextState(fromState: States): States {
         // Work out next state
         var possibleNextStates: States[] | undefined = undefined;

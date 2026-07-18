@@ -15,11 +15,12 @@ import {
     LevelUpPayload,
     EncounterSpawnPayload,
     BattleResultPayload,
+    EvolvePayload,
 } from '../common/types';
 import { randomName } from '../common/names';
 import * as localize from '../common/localize';
 import { availableColors, normalizeColor } from '../panel/pokemon-collection';
-import { getDefaultPokemon, getPokemonByGeneration, getRandomPokemonConfig, POKEMON_DATA } from '../common/pokemon-data';
+import { getDefaultPokemon, getEvolvedType, getPokemonByGeneration, getRandomPokemonConfig, POKEMON_DATA } from '../common/pokemon-data';
 import { ProgressMap, PokemonProgress, DEFAULT_PROGRESS, applyXp, xpForLevel } from '../common/progression';
 import { DEFAULT_BATTLE_STATS, resolveBattle } from '../common/battle';
 import { ActivityTracker } from './activity-tracker';
@@ -407,7 +408,42 @@ async function awardActivityXp(
     });
     if (result.leveledUp && result.newLevel !== undefined) {
         panel.postLevelUp({ pokemonName: activeName, newLevel: result.newLevel });
+        await maybeEvolve(context, activeName, result.progress.level, panel);
     }
+}
+
+/**
+ * Checks whether the named pokemon's species evolves at the given level and,
+ * if so, updates its persisted type in place and notifies the panel so it
+ * can swap the sprite.
+ */
+async function maybeEvolve(
+    context: vscode.ExtensionContext,
+    pokemonName: string,
+    level: number,
+    panel: IPokemonPanel,
+): Promise<void> {
+    const collection = PokemonSpecification.collectionFromMemento(context, getConfiguredSize());
+    const index = collection.findIndex((item) => item.name === pokemonName);
+    if (index === -1) {
+        return;
+    }
+    const fromType = collection[index].type;
+    const toType = getEvolvedType(fromType, level);
+    if (toType === fromType) {
+        return;
+    }
+    collection[index].type = toType;
+    await storeCollectionAsMemento(context, collection);
+
+    const toConfig = POKEMON_DATA[toType];
+    panel.postEvolve({
+        pokemonName,
+        fromType,
+        toType,
+        generation: `gen${toConfig.generation}`,
+        originalSpriteSize: toConfig.originalSpriteSize ?? 32,
+    });
 }
 
 /**
@@ -1030,6 +1066,7 @@ interface IPokemonPanel {
     postLevelUp(payload: LevelUpPayload): void;
     spawnEncounter(payload: EncounterSpawnPayload): void;
     postBattleResult(payload: BattleResultPayload): void;
+    postEvolve(payload: EvolvePayload): void;
 }
 
 class PokemonWebviewContainer implements IPokemonPanel {
@@ -1193,6 +1230,13 @@ class PokemonWebviewContainer implements IPokemonPanel {
     public postBattleResult(payload: BattleResultPayload): void {
         void this.getWebview().postMessage({
             command: 'battle-result',
+            ...payload,
+        });
+    }
+
+    public postEvolve(payload: EvolvePayload): void {
+        void this.getWebview().postMessage({
+            command: 'evolve',
             ...payload,
         });
     }

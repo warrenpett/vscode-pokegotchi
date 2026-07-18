@@ -39,6 +39,9 @@ export interface IPokemonType {
     setLevel(level: number): void;
     setXpProgress(current: number, max: number): void;
     removeStatsOverlay(): void;
+
+    // Evolution API
+    updateSpeciesRoot(newRoot: string): void;
 }
 
 export class PokemonInstanceState {

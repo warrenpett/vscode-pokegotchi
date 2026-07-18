@@ -103,6 +103,14 @@ export interface BattleResultPayload {
     won: boolean;
 }
 
+export interface EvolvePayload {
+    pokemonName: string;
+    fromType: PokemonType;
+    toType: PokemonType;
+    generation: string;
+    originalSpriteSize: number;
+}
+
 export const ALL_COLORS = [
     PokemonColor.default,
 ];
