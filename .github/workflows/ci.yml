@@ -23,6 +23,9 @@ jobs:
             - run: npm ci
             - run: npm run compile
 
+            - name: Run tests
+              run: xvfb-run -a node ./out/test/runTest.js
+
             - name: Package VSIX
               run: npm install -g vsce && vsce package
             - uses: actions/upload-artifact@v4
