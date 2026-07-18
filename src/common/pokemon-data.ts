@@ -90,14 +90,18 @@ export const POKEMON_DATA: { [key: string]: PokemonConfig } = {
     name: 'Caterpie',
     generation: PokemonGeneration.Gen1,
     cry: 'Caterpie!',
-    possibleColors: [PokemonColor.default]
+    possibleColors: [PokemonColor.default],
+    evolvesTo: 'metapod',
+    evolvesAtLevel: 7
   },
   metapod: {
     id: 11,
     name: 'Metapod',
     generation: PokemonGeneration.Gen1,
     cry: 'Metapod!',
-    possibleColors: [PokemonColor.default]
+    possibleColors: [PokemonColor.default],
+    evolvesTo: 'butterfree',
+    evolvesAtLevel: 10
   },
   butterfree: {
     id: 12,
@@ -111,14 +115,18 @@ export const POKEMON_DATA: { [key: string]: PokemonConfig } = {
     name: 'Weedle',
     generation: PokemonGeneration.Gen1,
     cry: 'Weedle!',
-    possibleColors: [PokemonColor.default]
+    possibleColors: [PokemonColor.default],
+    evolvesTo: 'kakuna',
+    evolvesAtLevel: 7
   },
   kakuna: {
     id: 14,
     name: 'Kakuna',
     generation: PokemonGeneration.Gen1,
     cry: 'Kakuna!',
-    possibleColors: [PokemonColor.default]
+    possibleColors: [PokemonColor.default],
+    evolvesTo: 'beedrill',
+    evolvesAtLevel: 10
   },
   beedrill: {
     id: 15,
@@ -132,14 +140,18 @@ export const POKEMON_DATA: { [key: string]: PokemonConfig } = {
     name: 'Pidgey',
     generation: PokemonGeneration.Gen1,
     cry: 'Pidgey!',
-    possibleColors: [PokemonColor.default]
+    possibleColors: [PokemonColor.default],
+    evolvesTo: 'pidgeotto',
+    evolvesAtLevel: 8
   },
   pidgeotto: {
     id: 17,
     name: 'Pidgeotto',
     generation: PokemonGeneration.Gen1,
     cry: 'Pidgeotto!',
-    possibleColors: [PokemonColor.default]
+    possibleColors: [PokemonColor.default],
+    evolvesTo: 'pidgeot',
+    evolvesAtLevel: 18
   },
   pidgeot: {
     id: 18,
@@ -1788,4 +1800,27 @@ export function getRandomPokemonConfig(): [PokemonType, PokemonConfig] {
   var keys = Object.keys(POKEMON_DATA);
   var randomKey = keys[Math.floor(Math.random() * keys.length)];
   return [randomKey as PokemonType, POKEMON_DATA[randomKey]];
+}
+
+/**
+ * Resolves however many evolution steps `level` qualifies for, e.g. a big
+ * single XP grant can jump a pokemon past more than one evolvesAtLevel
+ * threshold at once. The visited-set guards against a malformed cyclic
+ * evolvesTo chain in the data looping forever.
+ */
+export function getEvolvedType(type: PokemonType, level: number): PokemonType {
+  let currentType = type;
+  const visited = new Set<PokemonType>([currentType]);
+  for (; ;) {
+    const config = POKEMON_DATA[currentType];
+    if (!config?.evolvesTo || config.evolvesAtLevel === undefined || level < config.evolvesAtLevel) {
+      break;
+    }
+    if (visited.has(config.evolvesTo)) {
+      break;
+    }
+    currentType = config.evolvesTo;
+    visited.add(currentType);
+  }
+  return currentType;
 }
